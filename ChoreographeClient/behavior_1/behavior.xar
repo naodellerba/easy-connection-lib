@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8" ?><ChoregrapheProject xmlns="http://www.aldebaran-robotics.com/schema/choregraphe/project.xsd" xar_version="3"><Box name="root" id="-1" localization="8" tooltip="Root box of Choregraphe&apos;s behavior. Highest level possible." x="0" y="0"><bitmap>media/images/box/root.png</bitmap><script language="4"><content><![CDATA[]]></content></script><Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" /><Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" /><Input name="onStop" type="1" type_size="1" nature="3" inner="0" tooltip="Box behavior stops when a signal is received on this input." id="3" /><Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="4" /><Timeline enable="0"><BehaviorLayer name="behavior_layer1"><BehaviorKeyframe name="keyframe1" index="1"><Diagram><Box name="JeeachintoClient" id="1" localization="8" tooltip="" x="243" y="90"><bitmap>media/images/box/internet/internet.png</bitmap><script language="4"><content><![CDATA[from multiprocessing import Lock
+from pydoc import cli
+import socket, json, struct
+from threading import Thread
+from time import time
+from unicodedata import name
+import uuid
+
+def timeout_func(func, args=(), kwargs={}, timeout_duration=1, default=None):
+    import signal
+
+    class TimeoutError(Exception):
+        pass
+
+    def handler(signum, frame):
+        raise TimeoutError()
+
+    # set the timeout handler
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout_duration)
+    try:
+        result = func(*args, **kwargs)
+    except TimeoutError as exc:
+        result = default
+    finally:
+        signal.alarm(0)
+
+    return result
+
+
+class InvalidEncoding(Exception): pass
+
+def msg_encode(header = {}, body = b""):
+    header = json.dumps(header).encode()
+    len_header = len(header)
+    len_header = struct.pack("H",len_header)
+    len_body = len(body)
+    len_body = struct.pack("I",len_body)
+    return len_header+len_body+header+body
+
+def msg_decode(msg):
+    if len(msg) < 6:
+        raise InvalidEncoding()
+    len_header = struct.unpack("H",msg[:2])[0]
+    len_body = struct.unpack("I",msg[2:6])[0]
+    if len(msg) != len_header+len_body+6:
+        raise InvalidEncoding()
+    try:
+        return json.loads(msg[6:6+len_header]), msg[6+len_header:]
+    except Exception:
+        raise InvalidEncoding()
+
+
+
+"""
+
+subscribe
+{
+    "action":"subscribe",
+    "name":"pepper1" #Se non esiste, genera random
+}
+
+subscribe-status
+{
+    "action":"subscribe-status",
+    "name-assigned":"nomeassegnato"
+    "status":null/"Errore grave!"
+}
+
+send
+{
+    "action":"send",
+    "to":"nomedestinatario"
+}
+
+send-status
+{
+    "action":"send-status",
+    "status":null/"Errore grave!"
+}
+
+recv
+{
+    "action":"recv",
+    "by":"nomedestinatario"
+}
+
+close
+{
+    "action":"close"
+} // Chiudi socket
+
+
+"""
+
+class Server:
+    def __init__(self,bind_ip="0.0.0.0",bind_port=4545):
+        self.clienttable = {}
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+        self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEPORT,1)
+        self.socket.bind((bind_ip, bind_port))
+        self.socket.listen()
+
+
+    def start(self):
+        while True:
+            conn, _ = self.socket.accept()
+            timeout_func(self.client_accept_handle, args=(conn,), timeout_duration=10)
+
+
+    def recv_msg_client(self, client):
+        buffer = client.recv(6)
+        buffer += client.recv(struct.unpack("H",buffer[:2])[0])
+        buffer += client.recv(struct.unpack("I",buffer[2:6])[0])
+        return msg_decode(buffer)
+
+    def send_msg_client(self, client_name, header={}, body=b""):
+        if client_name in self.clienttable:
+            with self.clienttable[client_name]["lock"]:
+                self.clienttable[client_name]["conn"].sendall(msg_encode(header,body))
+
+    def send_msg_to_client(self, by, to, body):
+        if to in self.clienttable:
+            self.send_msg_client(to,{
+                "action":"recv",
+                "by": by
+            },body)
+            self.send_msg_client(by,{
+                "action":"send-status",
+                "status":None
+            })
+        else:
+            self.send_msg_client(by,{
+                "action":"send-status",
+                "status":"Target name not subscribed!"
+            })
+
+    def client_listener(self, client_name):
+        conn = self.clienttable[client_name]["conn"]
+        while True:
+            try:
+                header, data = self.recv_msg_client(conn)
+                if header["action"] == "close":
+                    conn.close()
+                    del self.clienttable[client_name]
+                    return
+                elif header["action"] == "send":
+                    self.send_msg_to_client(client_name, header["to"], data)
+            except (InvalidEncoding, KeyError): pass
+
+    def client_accept_handle(self, client):
+        header, _ = self.recv_msg_client(client)
+        if header["action"] != "subscribe":
+            client.close()
+            return
+        name_pc = None
+
+        if "name" in header:
+            name_pc = header["name"]
+        else:
+            name_pc = str(uuid.uuid4())
+
+        if name_pc in self.clienttable:
+            self.clienttable[name_pc]["conn"].close()
+
+        self.clienttable[name_pc] = {"conn":client, "lock":Lock()}
+        Thread(target=self.client_listener, args=(name_pc,)).start()
+        print("Si è iscritto",name_pc)
+        client.sendall(msg_encode(
+                {
+                    "action": "subscribe-status",
+                    "name-assigned": name_pc,
+                    "status": None
+                }
+        ))
+
+
+
+class ConnectionError(Exception):pass
+class ListenTimeoutError(Exception):pass
+class SendMessageError(Exception):pass
+
+class Client:
+    def __init__(self,server_ip,server_port=4545):
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.name = None
+        self.listen_buffer = []
+        self.readlock = Lock()
+        self.writelock = Lock()
+
+    def send_to_server(self, header = {}, body = b""):
+        with self.writelock:
+            self.socket.sendall(msg_encode(header,body))
+
+    def recv_from_server(self):
+        buffer = self.socket.recv(6)
+        buffer += self.socket.recv(struct.unpack("H",buffer[:2])[0])
+        buffer += self.socket.recv(struct.unpack("I",buffer[2:6])[0])
+        return msg_decode(buffer)
+
+    def connect(self, name=None):
+        self.name = name
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.server_ip,self.server_port))
+        self.send_to_server({"action":"subscribe"} if self.name is None else {"action":"subscribe", "name":self.name})
+        header, _ = self.recv_from_server()
+        if header["action"] == "subscribe-status":
+            if header["status"] is None:
+                self.name = header["name-assigned"]
+            else:
+                raise ConnectionError(header["status"])
+        else:
+            raise ConnectionError("Cannot reach the server!")
+
+    def listen(self, action = "recv", timeout=None):
+        with self.readlock:
+            def func():
+                for i in range(len(self.listen_buffer)):
+                    if self.listen_buffer[i][0]["action"] == action:
+                        result = self.listen_buffer[i]
+                        del self.listen_buffer[i]
+                        return result
+                while True:
+                    msg = self.recv_from_server()
+                    if msg[0]["action"] == action:
+                        return msg
+                    else:
+                        self.listen_buffer.append(msg)
+            if timeout is None:
+                result = func()
+            else:
+                result = timeout_func(func, timeout_duration=timeout)
+            if result is None:
+                raise ListenTimeoutError()
+            else:
+                return result
+
+    def sendto(self, dest_name, body):
+        self.send_to_server({ "action":"send", "to":dest_name },body)
+        header, _ = self.listen("send-status", timeout=10)
+        if not header["status"] is None:
+            raise SendMessageError(header["status"])
+
+    def close(self):
+        self.send_to_server({ "action":"close" })
+        self.socket.close()
+        self.socket = None
+        self.listen_buffer = None
+
+class MyClass(GeneratedClass):
+    def __init__(self):
+        GeneratedClass.__init__(self)
+
+    def onLoad(self):
+        self.client = Client(self.getParameter("Server IP"))
+        self.connected = False
+
+    def onUnload(self):
+        if self.connected:
+            self.client.close()
+        self.client = None
+
+    def onInput_onStart(self):
+        if not self.connected:
+            self.client.connect(self.getParameter("robotname"))
+        while self.client:
+            header, body = self.client.listen()
+            self.recv((header["by"], body)
+
+    def onInput_close(self):
+        self.onUnload() #it is recommended to reuse the clean-up as the box is stopped
+        self.onStopped() #activate the output of the box
+
+    def onInput_send(self, msg):
+        if self.connected:
+            self.client.sendto(*msg)]]></content></script><Input name="onLoad" type="1" type_size="1" nature="0" inner="1" tooltip="Signal sent when diagram is loaded." id="1" /><Input name="onStart" type="1" type_size="1" nature="2" inner="0" tooltip="Box behavior starts when a signal is received on this input." id="2" /><Input name="close" type="1" type_size="1" nature="3" inner="0" tooltip="" id="3" /><Input name="send" type="0" type_size="1" nature="1" inner="0" tooltip="" id="4" /><Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="5" /><Output name="recv" type="0" type_size="1" nature="2" inner="0" tooltip="" id="6" /><Parameter name="Server IP" inherits_from_parent="0" content_type="3" value="10.3.2.16" default_value="10.2.0.70" custom_choice="0" tooltip="" id="7" /><Parameter name="robotname" inherits_from_parent="0" content_type="3" value="pepper1" default_value="robot" custom_choice="0" tooltip="" id="8" /></Box><Link inputowner="1" indexofinput="2" outputowner="0" indexofoutput="2" /></Diagram></BehaviorKeyframe></BehaviorLayer></Timeline></Box></ChoregrapheProject>
