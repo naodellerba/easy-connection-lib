@@ -21,21 +21,7 @@ class Client:
         buffer += self.socket.recv(struct.unpack("I",buffer[2:6])[0])
         return utils.msg_decode(buffer)
 
-    def connect(self, name=None):
-        self.name = name
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.server_ip,self.server_port))
-        self.send_to_server({"action":"subscribe"} if self.name is None else {"action":"subscribe", "name":self.name})
-        header, _ = self.recv_from_server()
-        if header["action"] == "subscribe-status":
-            if header["status"] is None:
-                self.name = header["name-assigned"]
-            else:
-                raise utils.ConnectionError(header["status"])
-        else:
-            raise utils.ConnectionError("Cannot reach the server!")
-
-    def listen(self, action = "recv", timeout=None):
+    def recv_action(self, action = "recv", timeout=None):
         with self.readlock:
             def func():
                 for i in range(len(self.listen_buffer)):
@@ -57,10 +43,29 @@ class Client:
                 raise utils.ListenTimeoutError()
             else:
                 return result
+
+
+    def connect(self, name=None):
+        self.name = name
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((self.server_ip,self.server_port))
+        self.send_to_server({"action":"subscribe"} if self.name is None else {"action":"subscribe", "name":self.name})
+        header, _ = self.recv_from_server()
+        if header["action"] == "subscribe-status":
+            if header["status"] is None:
+                self.name = header["name-assigned"]
+            else:
+                raise utils.ConnectionError(header["status"])
+        else:
+            raise utils.ConnectionError("Cannot reach the server!")
+
+    def listen(self):
+        header, body = self.recv_action()
+        return header["by"], body
     
     def sendto(self, dest_name, body):
         self.send_to_server({ "action":"send", "to":dest_name },body)
-        header, _ = self.listen("send-status", timeout=10)
+        header, _ = self.recv_action("send-status", timeout=10)
         if not header["status"] is None:
             raise utils.SendMessageError(header["status"])
     
