@@ -54,8 +54,10 @@ def socket_msg_recv(sk):
     
     body_len = struct.unpack("I",buffer[2:6])[0]
     if body_len > 0:buffer += sk.recv(body_len)
-    
-    return msg_decode(buffer)
+    if len(buffer) > 6:
+        return msg_decode(buffer)
+    else:
+        return {}, b""
 
 """
 

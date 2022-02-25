@@ -26,8 +26,11 @@ class Server:
 
     def send_msg_client(self, client_name, header={}, body=b""):
         if client_name in self.clienttable:
-            with self.clienttable[client_name]["lock"]:
+            self.clienttable[client_name]["lock"].acquire()
+            try:
                 self.clienttable[client_name]["conn"].sendall(utils.msg_encode(header,body))
+            finally:
+                self.clienttable[client_name]["lock"].release()
 
     def send_msg_to_client(self, by, to, body):
         if to in self.clienttable:
@@ -50,7 +53,8 @@ class Server:
         while True:
             try:
                 header, data = self.recv_msg_client(conn)
-                print("ARRIVATO")
+                if "action" not in header:
+                    continue
                 if header["action"] == "close":
                     conn.close()
                     del self.clienttable[client_name]

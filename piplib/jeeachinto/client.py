@@ -4,7 +4,7 @@ import socket
 from . import utils
 
 class Client:
-    def __init__(self,server_ip,server_port=4545):
+    def __init__(self, server_ip, server_port=4545):
         self.server_ip = server_ip
         self.server_port = server_port
         self.name = None
@@ -13,26 +13,30 @@ class Client:
         self.writelock = Lock()
     
     def send_to_server(self, header = {}, body = b""):
-        with self.writelock:
+        self.writelock.acquire()
+        try:
             self.socket.sendall(utils.msg_encode(header,body))
+        finally:
+            self.writelock.release()
     
     def recv_from_server(self):
         return utils.socket_msg_recv(self.socket)
 
     def recv_action(self, action = "recv", timeout=None):
-        with self.readlock:
-            def func():
-                for i in range(len(self.listen_buffer)):
-                    if self.listen_buffer[i][0]["action"] == action:
-                        result = self.listen_buffer[i]
-                        del self.listen_buffer[i]
-                        return result  
-                while True:
-                    msg = self.recv_from_server()
-                    if msg[0]["action"] == action:
-                        return msg
-                    else:
-                        self.listen_buffer.append(msg)
+        self.readlock.acquire()
+        def func():
+            for i in range(len(self.listen_buffer)):
+                if self.listen_buffer[i][0]["action"] == action:
+                    result = self.listen_buffer[i]
+                    del self.listen_buffer[i]
+                    return result  
+            while True:
+                msg = self.recv_from_server()
+                if msg[0]["action"] == action:
+                    return msg
+                else:
+                    self.listen_buffer.append(msg)
+        try:
             if timeout is None:
                 result = func()
             else:
@@ -41,6 +45,8 @@ class Client:
                 raise utils.ListenTimeoutError()
             else:
                 return result
+        finally:
+            self.readlock.release()
 
 
     def connect(self, name=None):
