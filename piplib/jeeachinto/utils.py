@@ -1,4 +1,3 @@
-from __future__ import unicode_literals, print_function
 import json, struct
 class InvalidEncoding(Exception): pass
 class ConnectionError(Exception):pass

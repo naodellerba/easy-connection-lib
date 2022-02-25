@@ -1,4 +1,3 @@
-from __future__ import unicode_literals, print_function
 from multiprocessing import Lock
 import socket
 from threading import Thread
