@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+    webserver:
+        restart: unless-stopped
+        build: ./
+        ports:
+            - 4545:4545
+

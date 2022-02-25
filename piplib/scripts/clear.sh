@@ -4,4 +4,4 @@ cd "$(dirname "$0")"
 cd ..
 
 rm -r dist
-rm -r syjson.egg-info
+rm -r jeeachinto.egg-info
