@@ -1,3 +1,3 @@
 # jeeachinto - easy connections
 
-Create for allow the communication of robots in an easier way
+Created to allow communication of NAO and PEPPER robots in an easier way
