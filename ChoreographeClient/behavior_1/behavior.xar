@@ -26,27 +26,17 @@ class MyClass(GeneratedClass):
         GeneratedClass.__init__(self)
 
     def onLoad(self):
-        sys.path.append(os.path.join(self.behaviorAbsolutePath(),"lib"))
+        libpath = os.path.join(self.behaviorAbsolutePath(),"lib")
+        if libpath not in sys.path: sys.path.append(libpath)
         from jeeachinto import Client
         self.client = Client(self.getParameter("Server IP"))
-        self.connected = False
 
     def onUnload(self):
-        if self.connected:
-            self.client.close()
-        self.client = None
+        self.client.close()
 
     def onInput_onStart(self):
-        if not self.connected:
-            try:
-                self.client.connect(self.getParameter("robotname"))
-            except Exception:
-                self.client.connect(self.getParameter("robotname"))
-            try:
-                self.client.sendto(str(time.time()), "useless")
-            except Exception:
-                pass
-            self.connected = True
+        if not self.client.connected:
+            self.client.connect(self.getParameter("robotname"))
         while self.client:
             time.sleep(0.1)
             a,b = self.client.listen()
@@ -59,7 +49,7 @@ class MyClass(GeneratedClass):
         self.onStopped() #activate the output of the box
 
     def onInput_send(self, p):
-        if self.connected:
+        if self.client.connected:
             self.client.sendto(*p)]]>
                 </content>
               </script>
@@ -69,7 +59,7 @@ class MyClass(GeneratedClass):
               <Input name="send" type="0" type_size="1" nature="1" inner="0" tooltip="" id="4" />
               <Output name="onStopped" type="1" type_size="1" nature="1" inner="0" tooltip="Signal sent when box behavior is finished." id="5" />
               <Output name="recv" type="0" type_size="1" nature="2" inner="0" tooltip="" id="6" />
-              <Parameter name="Server IP" inherits_from_parent="0" content_type="3" value="10.2.0.70" default_value="10.2.0.70" custom_choice="0" tooltip="" id="7" />
+              <Parameter name="Server IP" inherits_from_parent="0" content_type="3" value="127.0.0.1" default_value="10.2.0.70" custom_choice="0" tooltip="" id="7" />
               <Parameter name="robotname" inherits_from_parent="0" content_type="3" value="pepper1-virtual" default_value="robot" custom_choice="0" tooltip="" id="8" />
             </Box>
             <Box name="sendto" id="3" localization="8" tooltip="" x="85" y="92">

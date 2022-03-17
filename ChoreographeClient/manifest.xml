@@ -1,13 +1,15 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<package installOnlyAtStartup="false" uuid="jeeachintoclient-dc8a3e" version="0.0.0">
+<package uuid="jeeachintoclient-dc8a3e" version="0.0.0" installOnlyAtStartup="false">
  <names>
   <name lang="en_US">Untitled</name>
  </names>
  <supportedLanguages>
   <language>en_US</language>
+  <language>it_IT</language>
  </supportedLanguages>
  <descriptionLanguages>
   <language>en_US</language>
+  <language>it_IT</language>
  </descriptionLanguages>
  <contents>
   <behaviorContent path="behavior_1">

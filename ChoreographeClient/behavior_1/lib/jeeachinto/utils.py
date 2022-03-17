@@ -1,29 +1,22 @@
-import json, struct
+from __future__ import print_function
+import json, struct, traceback
 class InvalidEncoding(Exception): pass
 class ConnectionError(Exception):pass
+class ClientNotConnected(Exception):pass
 class ListenTimeoutError(Exception):pass
 class SendMessageError(Exception):pass
 
-def timeout_func(func, args=(), kwargs={}, timeout_duration=1, default=None):
-    import signal
+DEBUG = False
+EXCEPTION = True
+TIMEOUT_SOCKS = 3
 
-    class TimeoutError(Exception):
-        pass
+def pdbg(*args,**kwargs):
+    if DEBUG:
+        print(*args,**kwargs)
 
-    def handler(signum, frame):
-        raise TimeoutError()
-
-    # set the timeout handler
-    signal.signal(signal.SIGALRM, handler) 
-    signal.alarm(timeout_duration)
-    try:
-        result = func(*args, **kwargs)
-    except TimeoutError as exc:
-        result = default
-    finally:
-        signal.alarm(0)
-
-    return result
+def pexc():
+    if DEBUG and EXCEPTION:
+        traceback.print_exc()
 
 def msg_encode(header = {}, body = b""):
     header = json.dumps(header).encode()
@@ -46,17 +39,20 @@ def msg_decode(msg):
         raise InvalidEncoding()
 
 def socket_msg_recv(sk):
-    buffer = sk.recv(6)
+    try:
+        buffer = sk.recv(6)
 
-    header_len = struct.unpack("H",buffer[:2])[0]
-    if header_len > 0: buffer += sk.recv(header_len)
-    
-    body_len = struct.unpack("I",buffer[2:6])[0]
-    if body_len > 0:buffer += sk.recv(body_len)
-    if len(buffer) > 6:
-        return msg_decode(buffer)
-    else:
-        return {}, b""
+        header_len = struct.unpack("H",buffer[:2])[0]
+        if header_len > 0: buffer += sk.recv(header_len)
+        
+        body_len = struct.unpack("I",buffer[2:6])[0]
+        if body_len > 0:buffer += sk.recv(body_len)
+        if len(buffer) > 6:
+            return msg_decode(buffer)
+        else:
+            return {}, b""
+    except Exception:
+        raise ConnectionError()
 
 """
 

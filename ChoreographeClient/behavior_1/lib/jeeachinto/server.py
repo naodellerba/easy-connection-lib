@@ -17,7 +17,8 @@ class Server:
     def start(self):
         while True:
             conn, _ = self.socket.accept()
-            utils.timeout_func(self.client_accept_handle, args=(conn,), timeout_duration=10)
+            self.client_accept_handle(conn)
+            utils.pdbg("Status:",list(self.clienttable.keys()))
 
 
     def recv_msg_client(self, client):
@@ -26,9 +27,11 @@ class Server:
     def send_msg_client(self, client_name, header={}, body=b""):
         if client_name in self.clienttable:
             self.clienttable[client_name]["lock"].acquire()
+            self.clienttable[client_name]["conn"].settimeout(utils.TIMEOUT_SOCKS)
             try:
                 self.clienttable[client_name]["conn"].sendall(utils.msg_encode(header,body))
             finally:
+                self.clienttable[client_name]["conn"].settimeout(None)
                 self.clienttable[client_name]["lock"].release()
 
     def send_msg_to_client(self, by, to, body):
@@ -54,35 +57,40 @@ class Server:
                 header, data = self.recv_msg_client(conn)
                 if "action" not in header:
                     continue
-                if header["action"] == "close":
-                    conn.close()
-                    del self.clienttable[client_name]
-                    return
-                elif header["action"] == "send":
+                if header["action"] == "send":
                     self.send_msg_to_client(client_name, header["to"], data)
-            except (utils.InvalidEncoding, KeyError): pass
+            except Exception as e:
+                utils.pdbg(client_name,"disconnected!")
+                utils.pexc()
+                conn.close()
+                del self.clienttable[client_name]
+                return
                     
     def client_accept_handle(self, client):
-        header, _ = self.recv_msg_client(client)
-        if header["action"] != "subscribe":
-            client.close()
-            return
-        name_pc = None
+        try:
+            header, _ = self.recv_msg_client(client)
+            if header["action"] != "subscribe":
+                client.close()
+                return
+            name_pc = None
 
-        if "name" in header:
-            name_pc = header["name"]
-        else:
-            name_pc = str(uuid.uuid4())
-        
-        if name_pc in self.clienttable:
-            self.clienttable[name_pc]["conn"].close()
+            if "name" in header:
+                name_pc = header["name"]
+            else:
+                name_pc = str(uuid.uuid4())
             
-        self.clienttable[name_pc] = {"conn":client, "lock":Lock()}
-        Thread(target=self.client_listener, args=(name_pc,)).start()
-        client.sendall(utils.msg_encode(
-                {
-                    "action": "subscribe-status",
-                    "name-assigned": name_pc,
-                    "status": None
-                }
-        ))
+            if name_pc in self.clienttable:
+                self.clienttable[name_pc]["conn"].close()
+                
+            self.clienttable[name_pc] = {"conn":client, "lock":Lock()}
+            Thread(target=self.client_listener, args=(name_pc,)).start()
+            utils.pdbg(name_pc,"connected!")
+            client.sendall(utils.msg_encode(
+                    {
+                        "action": "subscribe-status",
+                        "name-assigned": name_pc,
+                        "status": None
+                    }
+            ))
+        except socket.timeout:
+            pass
