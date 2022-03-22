@@ -21,8 +21,10 @@ class Client:
         self.__connected_check()
         self.writelock.acquire()
         try:
+            self.socket.settimeout(utils.TIMEOUT_SOCKS)
             self.socket.sendall(utils.msg_encode(header,body))
         finally:
+            self.socket.settimeout(None)
             self.writelock.release()
     
     def recv_from_server(self):
@@ -54,11 +56,11 @@ class Client:
             self.readlock.release()
 
 
-    def connect(self, name=None):
+    def connect(self, name=None, timeout=utils.TIMEOUT_SOCKS):
         if self.connected: return
         self.name = name
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.settimeout(utils.TIMEOUT_SOCKS)
+        self.socket.settimeout(timeout)
         self.socket.connect((self.server_ip,self.server_port))
         self.connected = True
 
@@ -87,7 +89,7 @@ class Client:
     def sendto(self, dest_name, body):
         self.__connected_check()
         self.send_to_server({ "action":"send", "to":dest_name },body)
-        header, _ = self.recv_action("send-status", timeout=10)
+        header, _ = self.recv_action("send-status", timeout=utils.TIMEOUT_SOCKS)
         if not header["status"] is None:
             raise utils.SendMessageError(header["status"])
     
