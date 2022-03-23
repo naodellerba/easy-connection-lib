@@ -1,5 +1,7 @@
 from __future__ import print_function
 import json, struct, traceback
+from threading import Lock
+
 class InvalidEncoding(Exception): pass
 class ConnectionError(Exception):pass
 class ClientNotConnected(Exception):pass
@@ -53,6 +55,32 @@ def socket_msg_recv(sk):
             return {}, b""
     except Exception:
         raise ConnectionError()
+
+class ProcessEvent:
+    def __locked_lock(self):
+        res = Lock()
+        res.acquire()
+        return res
+    
+    def __init__(self):
+        self.lock = self.__locked_lock()
+        self.signallock = Lock()
+
+    def wait(self, blocking = True, timeout=None):
+        wait_sess = self.lock
+        if timeout is None: locked = wait_sess.acquire(blocking)
+        else: locked = wait_sess.acquire(timeout=timeout)
+        if locked:
+            wait_sess.release()
+        return locked
+    
+    def signal(self):
+        self.signallock.acquire()
+        prev_lock = self.lock
+        self.lock = self.__locked_lock()
+        prev_lock.release()
+        self.signallock.release()
+
 
 """
 

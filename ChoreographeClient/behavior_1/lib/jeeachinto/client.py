@@ -1,5 +1,5 @@
 from multiprocessing import Lock
-import socket
+import socket, time
 from . import utils
 
 class Client:
@@ -10,7 +10,9 @@ class Client:
         self.listen_buffer = []
         self.connected = False
         self.readlock = Lock()
+        self.bufferlock = Lock()
         self.writelock = Lock()
+        self.eventlock = utils.ProcessEvent()
         self.socket = None
     
     def __connected_check(self):
@@ -33,27 +35,42 @@ class Client:
 
     def recv_action(self, action = "recv", timeout=None):
         self.__connected_check()
-        self.readlock.acquire()
-        try:
-            for i in range(len(self.listen_buffer)):
-                if self.listen_buffer[i][0]["action"] == action:
-                    result = self.listen_buffer[i]
-                    del self.listen_buffer[i]
-                    return result
-            self.socket.settimeout(timeout)
-            while True:
-                msg = self.recv_from_server()
-                if msg[0]["action"] == action:
-                    return msg
-                else:
+        while True:
+            self.bufferlock.acquire()
+            try:
+                for i in range(len(self.listen_buffer)):
+                    if self.listen_buffer[i][0]["action"] == action:
+                        result = self.listen_buffer[i]
+                        del self.listen_buffer[i]
+                        return result
+            finally:
+                self.bufferlock.release()
+            
+            if self.readlock.acquire(False):
+                try:
+                    bef = time.time()
+                    self.socket.settimeout(timeout)
+                    msg = self.recv_from_server()
                     self.listen_buffer.append(msg)
-            return result
-        except socket.timeout:
-            self.close()
-            raise utils.ListenTimeoutError()
-        finally:
-            self.socket.settimeout(utils.TIMEOUT_SOCKS)
-            self.readlock.release()
+                    if timeout:
+                        timeout -= time.time()-bef
+                        if timeout < 0: timeout = 0
+                except socket.timeout:
+                    self.close()
+                    raise utils.ListenTimeoutError()
+                finally:
+                    self.socket.settimeout(utils.TIMEOUT_SOCKS)
+                    self.eventlock.signal()
+                    self.readlock.release()
+            else:
+                bef = time.time()
+                if not self.eventlock.wait(timeout=timeout):
+                    self.close()
+                    raise utils.ListenTimeoutError()
+                else:
+                    if timeout:
+                        timeout -= time.time()-bef
+                        if timeout < 0: timeout = 0
 
 
     def connect(self, name=None, timeout=utils.TIMEOUT_SOCKS):
