@@ -51,7 +51,9 @@ class Client:
                     bef = time.time()
                     self.socket.settimeout(timeout)
                     msg = self.recv_from_server()
+                    self.bufferlock.acquire()
                     self.listen_buffer.append(msg)
+                    self.bufferlock.release()
                     if timeout:
                         timeout -= time.time()-bef
                         if timeout < 0: timeout = 0
