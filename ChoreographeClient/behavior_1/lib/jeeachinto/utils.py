@@ -1,6 +1,6 @@
 from __future__ import print_function
 import json, struct, traceback
-from threading import Lock
+from jeeachinto.universal_lock import Lock
 
 class InvalidEncoding(Exception): pass
 class ConnectionError(Exception):pass

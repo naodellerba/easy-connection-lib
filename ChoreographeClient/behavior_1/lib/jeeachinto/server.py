@@ -1,4 +1,4 @@
-from multiprocessing import Lock
+from jeeachinto.universal_lock import Lock
 import socket
 from threading import Thread
 import uuid

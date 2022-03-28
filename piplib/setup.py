@@ -5,9 +5,9 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="jeeachinto",
-    version="0.2.2",
+    version="0.2.3",
     author="IISS Luigi Dell' Erba",
-    author_email="me@domysh.com",
+    author_email="naoittdellerba@gmail.com",
     install_requires=[],
     description="Connect to hosts in an easier way",
     long_description=long_description,
