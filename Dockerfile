@@ -3,7 +3,7 @@ FROM python:3-buster
 RUN mkdir /execute
 WORKDIR /execute
 
-RUN pip install --no-cache-dir jeeachinto>=0.1.1
+RUN pip install --no-cache-dir "jeeachinto>=0.2.3"
 RUN echo '__import__("jeeachinto").Server().start()' > exec.py
 
 USER nobody
