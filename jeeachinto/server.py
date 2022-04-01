@@ -81,7 +81,8 @@ class Server:
                     pass
                 with self.clienttablelock:
                     try:
-                        del self.clienttable[client_name]
+                        if self.clienttable[client_name]["conn"] == conn:
+                            del self.clienttable[client_name]
                     except Exception:
                         pass
                 return
