@@ -14,7 +14,9 @@ TIMEOUT_SOCKS = 3
 
 def pdbg(*args,**kwargs):
     if DEBUG:
-        print(*args,**kwargs, flush=True)
+        if not "flush" in kwargs:
+            kwargs["flush"] = True
+        print(*args,**kwargs)
 
 def pexc():
     if DEBUG and EXCEPTION:
