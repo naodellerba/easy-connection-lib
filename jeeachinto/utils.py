@@ -28,31 +28,14 @@ def msg_encode(header = {}, body = b""):
     len_body = struct.pack("I",len_body)
     return len_header+len_body+header+body
 
-def msg_decode(msg):
-    if len(msg) < 6:
-        raise InvalidEncoding()
-    len_header = struct.unpack("H",msg[:2])[0]
-    len_body = struct.unpack("I",msg[2:6])[0]
-    if len(msg) != len_header+len_body+6:
-        raise InvalidEncoding()
-    try:
-        return json.loads(msg[6:6+len_header]), msg[6+len_header:]
-    except Exception:
-        raise InvalidEncoding()
-
 def socket_msg_recv(sk):
     try:
-        buffer = sk.recv(6)
-
-        header_len = struct.unpack("H",buffer[:2])[0]
-        if header_len > 0: buffer += sk.recv(header_len)
-        
-        body_len = struct.unpack("I",buffer[2:6])[0]
-        if body_len > 0:buffer += sk.recv(body_len)
-        if len(buffer) > 6:
-            return msg_decode(buffer)
-        else:
-            return {}, b""
+        header_len = struct.unpack("H",sk.recv(2))[0]
+        body_len = struct.unpack("I",sk.recv(4))[0]
+        header = body = b""
+        if header_len > 0: header = sk.recv(header_len)
+        if body_len > 0: body = sk.recv(body_len)
+        return json.loads(header), body
     except Exception:
         raise ConnectionError()
 
