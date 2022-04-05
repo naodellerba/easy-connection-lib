@@ -14,11 +14,19 @@ TIMEOUT_SOCKS = 3
 
 def pdbg(*args,**kwargs):
     if DEBUG:
-        print(*args,**kwargs)
+        print(*args,**kwargs, flush=True)
 
 def pexc():
     if DEBUG and EXCEPTION:
         traceback.print_exc()
+
+def sock_exact_recv(sock,n_bytes):
+    data = b""
+    while n_bytes > 0:
+        packet = sock.recv(n_bytes)
+        data+=packet
+        n_bytes-=len(packet)
+    return data
 
 def msg_encode(header = {}, body = b""):
     header = json.dumps(header).encode()
@@ -30,11 +38,11 @@ def msg_encode(header = {}, body = b""):
 
 def socket_msg_recv(sk):
     try:
-        header_len = struct.unpack("H",sk.recv(2))[0]
-        body_len = struct.unpack("I",sk.recv(4))[0]
+        header_len = struct.unpack("H",sock_exact_recv(sk, 2))[0]
+        body_len = struct.unpack("I",sock_exact_recv(sk, 4))[0]
         header = body = b""
-        if header_len > 0: header = sk.recv(header_len)
-        if body_len > 0: body = sk.recv(body_len)
+        if header_len > 0: header = sock_exact_recv(sk, header_len)
+        if body_len > 0: body = sock_exact_recv(sk, body_len)
         pdbg("PACKET_BEF_DECODE",header,body)
         return json.loads(header), body
     except Exception:
