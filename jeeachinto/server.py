@@ -10,7 +10,6 @@ class Server:
         self.clienttablelock = Lock()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEPORT,1)
         self.socket.bind((bind_ip, bind_port))
         self.socket.listen()
              

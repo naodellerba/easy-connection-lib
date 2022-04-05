@@ -35,6 +35,7 @@ def socket_msg_recv(sk):
         header = body = b""
         if header_len > 0: header = sk.recv(header_len)
         if body_len > 0: body = sk.recv(body_len)
+        pdbg("PACKET_BEF_DECODE",header,body)
         return json.loads(header), body
     except Exception:
         raise ConnectionError()
