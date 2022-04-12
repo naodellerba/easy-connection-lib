@@ -5,10 +5,10 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="jeeachinto",
-    version="0.3.1",
+    version="0.3.5",
     author="IISS Luigi Dell' Erba",
     author_email="naoittdellerba@gmail.com",
-    install_requires=[],
+    install_requires=["kthread"],
     description="Connect to hosts in an easier way",
     long_description=long_description,
     long_description_content_type="text/markdown",

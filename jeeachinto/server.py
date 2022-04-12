@@ -1,6 +1,6 @@
 from jeeachinto.universal_lock import Lock
-import socket
-from threading import Thread
+import socket, time
+from kthread import KThread
 import uuid
 from . import utils
 
@@ -10,11 +10,42 @@ class Server:
         self.clienttablelock = Lock()
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-        self.socket.bind((bind_ip, bind_port))
-        self.socket.listen()
-             
+        self.bind_ip = bind_ip
+        self.bind_port = bind_port
+        self.heartbeater_thread = KThread(target=self.heartbeater)
+
+    def heartbeater(self):
+        while True:
+            with self.clienttablelock:
+                testtable = list(dict(self.clienttable).items())
+            testtable.sort(key=lambda a: a[1]["checked"])
+            if len(testtable) > 0:
+                client_name = testtable[0][0]
+                try:
+                    self.send_msg_client(client_name)
+                except Exception:
+                    utils.pdbg(client_name,"disconnected!")
+                    utils.pexc()
+                    conn = testtable[0][1]["conn"]
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    with self.clienttablelock:
+                        try:
+                            if self.clienttable[client_name]["conn"] == conn:
+                                self.clienttable[client_name]["thread"].kill()
+                                del self.clienttable[client_name]
+                        except Exception:
+                            pass
+            time.sleep(1)
+
+                
 
     def start(self):
+        self.socket.bind((self.bind_ip, self.bind_port))
+        self.socket.listen()
+        self.heartbeater_thread.start()
         while True:
             conn, _ = self.socket.accept()
             self.client_accept_handle(conn)
@@ -35,6 +66,7 @@ class Server:
                 target["conn"].sendall(utils.msg_encode(header,body))
             finally:
                 target["conn"].settimeout(None)
+                target["checked"] = time.time()
                 target["lock"].release()
         else:
             self.clienttablelock.release()
@@ -99,15 +131,22 @@ class Server:
             else:
                 name_pc = str(uuid.uuid4())
             
+            
+
             with self.clienttablelock:
                 try:
                     if name_pc in self.clienttable:
                         self.clienttable[name_pc]["conn"].close()
                 except Exception:
                     pass
-                self.clienttable[name_pc] = {"conn":client, "lock":Lock()}
-
-            Thread(target=self.client_listener, args=(name_pc,)).start()
+                self.clienttable[name_pc] = {
+                    "conn":client,
+                    "lock":Lock(),
+                    "checked":time.time(),
+                    "thread": KThread(target=self.client_listener, args=(name_pc,))
+                }
+                self.clienttable[name_pc]["thread"].start()
+            
             utils.pdbg(name_pc,"connected!")
             client.sendall(utils.msg_encode(
                     {
