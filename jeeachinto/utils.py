@@ -39,16 +39,20 @@ def msg_encode(header = {}, body = b""):
     return len_header+len_body+header+body
 
 def socket_msg_recv(sk):
-    try:
-        header_len = struct.unpack("H",sock_exact_recv(sk, 2))[0]
-        body_len = struct.unpack("I",sock_exact_recv(sk, 4))[0]
-        header = body = b""
-        if header_len > 0: header = sock_exact_recv(sk, header_len)
-        if body_len > 0: body = sock_exact_recv(sk, body_len)
-        pdbg("PACKET_BEF_DECODE",header,body)
-        return json.loads(header), body
-    except Exception:
-        raise ConnectionError()
+    while True:
+        try:
+            header_len = struct.unpack("H",sock_exact_recv(sk, 2))[0]
+            body_len = struct.unpack("I",sock_exact_recv(sk, 4))[0]
+            header = body = b""
+            if header_len > 0: header = sock_exact_recv(sk, header_len)
+            if body_len > 0: body = sock_exact_recv(sk, body_len)
+            if len(header) + len(body) > 0:
+                header = json.loads(header)
+                if not "action" in header.keys(): continue
+                pdbg("PACKET_BEF_DECODE",header,body)
+                return header, body
+        except Exception:
+            raise ConnectionError()
 
 class ProcessEvent:
     def __locked_lock(self):
